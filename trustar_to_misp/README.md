@@ -1,5 +1,7 @@
 # trustar_to_misp
 
+**Author:** [@th3_jiv3r](https://twitter.com/th3_jiv3r)  
+
 This integration will scrape the TruStar API to pull reports from the RH-ISAC enclave.  
 
 TruStar reports are formatted into MISP json standard and make API calls to MISP via PyMISP to create a MISP event for each TruStar report found.  
