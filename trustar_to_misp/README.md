@@ -8,12 +8,12 @@ TruStar reports are formatted into MISP json standard and make API calls to MISP
   
 #### Recommended to set the MISP configuration in keys.py and the TruStar configuration in trustar.conf  
 
-  **MISP** - *URL, API key, certificate verification, and client certificate (if preferred)*  
-  **TruStar** - *Auth endpoint, API endpoint, API key, API secret*  
+  *MISP - URL, API key, certificate verification, and client certificate (if preferred)*  
+  *TruStar - Auth endpoint, API endpoint, API key, API secret*  
   
 #### Recommended to put the files from this repo into /var/www/MISP/PyMISP/examples/  
 
-  **ex.** *cp ~/misp_integrations/trustar_to_misp/* /var/www/MISP/PyMISP/examples/*  
+  **ex.** *cp ~/misp_integrations/trustar_to_misp/** */var/www/MISP/PyMISP/examples/*  
   
 #### Recommended to run as a cronjob and scrape reports from TruStar to populate into MISP *(Example shows running once every 4 hours)*  
 
