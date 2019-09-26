@@ -17,5 +17,5 @@ TruStar reports are formatted into MISP json standard and make API calls to MISP
   
 #### Recommended to run as a cronjob and scrape reports from TruStar to populate into MISP *(Example shows running once every 4 hours)*  
 
-  **ex.** *0 */4 * * * /var/www/MISP/venv/bin/python3 /var/www/MISP/PyMISP/examples/trustar_misp.py*  
+  **ex.** 0 */4 * * * */var/www/MISP/venv/bin/python3 /var/www/MISP/PyMISP/examples/trustar_misp.py*  
  
