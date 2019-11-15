@@ -1,135 +1,136 @@
-import json
-from datetime import datetime
-import time
-from pymisp import ExpandedPyMISP
 import requests
+import json
+from pymisp import ExpandedPyMISP, MISPEvent, MISPOrganisation
+from keys import misp_url, misp_key, misp_verifycert
 
-#Defining MISP INSTANCE
-misp = ExpandedPyMISP(url='Your MISP', key='API KEY', ssl='True')
 
-#Proofpoint TAP API CALL
+# initialize PyMISP
+misp = ExpandedPyMISP(url=misp_url, key=misp_key, ssl=misp_verifycert)
+
 url = "https://tap-api-v2.proofpoint.com/v2/siem/all"
 
-querystring = {"format": "json", "sinceSeconds": "3600"}
+alertType = ("messagesBlocked", "messagesDelivered")
 
-headers = {
-    'Authorization': "Basic 'API KEY'",
-    'Accept': "*/*",
-    'Cache-Control': "no-cache",
-    'Host': "tap-api-v2.proofpoint.com",
-    'Accept-Encoding': "gzip, deflate",
-    'Connection': "keep-alive",
-    'cache-control': "no-cache"
+# TODO:
+#   clicks:
+#       add functionality to collect clicksPermitted and clicksBlocked TAP alerts in same script
+#   messages:
+#       if messagesBlocked; quarantineFolder & quarantineRule
+#   all alerts:
+#       if headerReplyTo != null OR ''; event.add_attribute('comment', messages["headerReplyTo"])
+#       if ccAddresses != null OR ''; event.add_attribute('comment', messages["ccAddresses"])
+#       if replyTo != null OR ''; event.add_attribute('comment', messages["replyTo"])
+#       if toAddresses != null OR ''; event.add_attribute('comment', messages["toAddresses"])
+#       if xmailer != null OR ''; event.add_attribute('comment', messages["xmailer"])
+
+
+# max query is 1h, and we want Proofpoint TAP api to return json
+queryString = {
+    "sinceSeconds": "3600",
+    "format": "json"
 }
 
-#Defining Global Variables
-response = requests.request("GET", url, headers=headers, params=querystring)
-alert_type = ("messagesBlocked", "messagesDelivered")
-var = json.loads(response.text)
-ts = time.time()
-now = datetime.now()
+# auth to api needs to be set as a header, not as part of the query string
+headers = {
+    'Authorization': "Basic #{API_KEY}"  # add your Proofpoint TAP api key here
+}
 
-#For Loop Structure
-for type_alert in alert_type:
+response = requests.request("GET", url, headers=headers, params=queryString)
 
-    for event in var[type_alert]:
-        urls = []
-        tags = []
-        colour = []
-        for recipient in event["recipient"]:
+jsonData = json.loads(response.text)
 
-            for from_address in event["fromAddress"]:
+for alert in alertType:
+    for messages in jsonData[alert]:
+        orgc = MISPOrganisation()
+        orgc.name = 'Proofpoint'
+        orgc.id = '#{ORGC_ID}'  # organisation id
+        orgc.uuid = '#{ORGC_UUID}'  # organisation uuid
+        # initialize and set MISPEvent()
+        event = MISPEvent()
+        event.Orgc = orgc
+        event.info = alert
+        event.distribution = 0  # Optional, defaults to MISP.default_event_distribution in MISP config
+        event.threat_level_id = 0  # Optional, defaults to MISP.default_event_threat_level in MISP config
+        event.analysis = 0  # Optional, defaults to 0 (initial analysis)
 
-                for threat_map in event["threatsInfoMap"]:
+        recipient = event.add_attribute('email-dst', messages["recipient"][0])
+        recipient.comment = 'recipient address'
 
-                            threat_type = {
-                        "url": "url",
-                        "attachment": "filename",
-                        "message": "email-body"
-                    }
+        sender = event.add_attribute('email-src', messages["sender"])
+        sender.comment = 'sender address'
 
-                            tag_type = {
-                        "malware": "Malware",
-                        "phish": "Phish",
-                        "spam": "Spam",
-                        "impostor": "Impostor"
-                    }
-                            tag_colour = {
-                        "malware": "#0000FF",
-                        "phish": "#7FE5F0",
-                        "spam": "#FF0000",
-                        "impostor": "#e0e22a"
-                    }
+        fromAddress = event.add_attribute('email-src-display-name', messages["fromAddress"])
+        # for reasons unbeknownst to me, uncommenting the following line breaks this attribute from posting
+        # fromAddress.comment = 'from address'
 
-                            tag = {
-                        "colour": tag_colour.get(threat_map["classification"]),
-                        "exportable": True,
-                        "name": tag_type.get(threat_map["classification"])
-                    }
-                            tags.append(tag)
+        headerFrom = event.add_attribute('email-header', messages["headerFrom"])
+        headerFrom.comment = 'email header from'
+
+        senderIP = event.add_attribute('ip-src', messages["senderIP"])
+        senderIP.comment = 'sender IP'
+
+        subject = event.add_attribute('email-subject', messages["subject"])
+        subject.comment = 'email subject'
+
+        messageSize = event.add_attribute('size-in-bytes', messages["messageSize"])
+        messageSize.comment = 'size of email in bytes'
+
+        malwareScore = event.add_attribute('comment', messages["malwareScore"])
+        malwareScore.comment = 'malware score'
+
+        phishScore = event.add_attribute('comment', messages["phishScore"])
+        phishScore.comment = 'phish score'
+
+        spamScore = event.add_attribute('comment', messages["spamScore"])
+        spamScore.comment = 'spam score'
+
+        imposterScore = event.add_attribute('comment', messages["impostorScore"])
+        imposterScore.comment = 'impostor score'
+
+        completelyRewritten = event.add_attribute('comment', messages["completelyRewritten"])
+        completelyRewritten.comment = 'proofpoint url defense'
+
+        # grab the threat info for each message in TAP
+        for threatInfo in messages["threatsInfoMap"]:
+            threat_type = {
+                "url": "url",
+                "attachment": "email-attachment",
+                "message": "email-body"
+            }
+
+            threat = event.add_attribute(threat_type.get(threatInfo["threatType"]), threatInfo["threat"])
+            threat.comment = 'threat'
+
+            threatUrl = event.add_attribute('link', threatInfo["threatUrl"])
+            threatUrl.comment = 'link to threat in TAP'
+
+            threatStatus = event.add_attribute('comment', threatInfo["threatStatus"])
+            threatStatus.comment = "proofpoint's threat status"
 
 
-                            threat_info = {
-                        "comment": threat_map["threatType"],
-                        "category": "Payload delivery",
-                        "timestamp": ts,
-                        "to_ids": False,
-                        "value": threat_map["threat"],
-                        "disable_correlation": False,
-                        "object_relation": "",
-                        "type": threat_type.get(threat_map["threatType"])
-                    }
-                            sender_ip = {
-                        "comment": "Sender IP",
-                        "category": "Payload delivery",
-                        "timestamp": ts,
-                        "to_ids": False,
-                        "value": event["senderIP"],
-                        "disable_correlation": False,
-                        "object_relation": "",
-                        "type": "ip-src"
-                    }
-                            sender_address = {
-                        "comment": "Sender Address",
-                        "category": "Payload delivery",
-                        "timestamp": ts,
-                        "to_ids": False,
-                        "value": from_address,
-                        "disable_correlation": False,
-                        "object_relation": "",
-                        "type": "email-src-display-name"
-                            }
+            event.add_tag(threatInfo["classification"])
 
-                            destination = {
-                        "comment": "Destination Address",
-                        "category": "Payload delivery",
-                        "timestamp": ts,
-                        "to_ids": False,
-                        "value": recipient,
-                        "disable_correlation": False,
-                        "object_relation": "",
-                        "type": "email-dst-display-name"
-                    }
+        # grab which policy route the message took
+        for policy in messages["policyRoutes"]:
+            policyRoute = event.add_attribute('comment', policy)
+            policyRoute.comment = 'email policy route'
 
-                            urls.append(threat_info)
-                            urls.append(sender_ip)
-                            urls.append(destination)
-                            urls.append(sender_address)
-                            EventDict = {
-                        "Event": {
-                        "info": type_alert,
-                        "publish_timestamp": ts,
-                        "timestamp": ts,
-                        "analysis": "2",
-                        "Tag": tags,
-                        "Attribute": urls,
-                        "extends_uuid": "",
-                        "published": False,
-                        "date": now.strftime("%Y-%m-%d"),
-                        "Orgc": {
-                            "uuid": "Your UUID",
-                            "name": "Proofpoint"
-                                },
-                        }
-                    }
-    misp.add_event(EventDict)
+        # was the threat in the body of the email or is it an attachment?
+        for parts in messages["messageParts"]:
+            disposition = event.add_attribute('comment', parts["disposition"])
+            disposition.comment = 'email body or attachment'
+
+            # sha256 hash of threat
+            sha256 = event.add_attribute('sha256', parts["sha256"])
+            sha256.comment = 'sha256 hash'
+
+            # md5 hash of threat
+            md5 = event.add_attribute('md5', parts["md5"])
+            md5.comment = 'md5 hash'
+
+            # filename of threat
+            filename = event.add_attribute('filename', parts["filename"])
+            filename.comment = 'filename'
+
+        misp.add_event(event.to_json())
+        

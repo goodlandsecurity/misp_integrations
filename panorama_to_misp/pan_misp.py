@@ -2,68 +2,46 @@ import requests
 import xmltodict
 import json
 from datetime import datetime
-from pymisp import ExpandedPyMISP
+from pymisp import ExpandedPyMISP, MISPEvent, MISPOrganisation
 from keys import misp_url, misp_key, misp_verifycert
 
 now = datetime.now()
+# initialize ExpandedPyMISP()
 misp = ExpandedPyMISP(url=misp_url, key=misp_key, ssl=misp_verifycert)
 
-url = "https://PANORAMA/api/"
+url = 'https://#{PANORAMA}/api/'
 
 querystring = {
     "type":"report",
     "async":"yes",
     "reporttype":"predefined",
     "reportname":"top-attacks",
-    "key":"API KEY"
+    "key":"#{API_KEY}"  # put your Panorama api key here
 }
 
-headers = {
-    'Accept': "*/*",
-    'Cache-Control': "no-cache",
-    }
-
-response = requests.request("GET", url, headers=headers, params=querystring)
+# try with "..., verify=False)" if you get an SSL error
+response = requests.request("GET", url, params=querystring)
 
 resp_text = response.text
 
 json_data = json.loads(json.dumps(xmltodict.parse(resp_text)))
 
-
-event_list = []
-attribute_list = []
-
-
-event = {
-            "Event": {
-                "info": json_data['report']['result']['@name'] + " | " + json_data['report']['result']['@range'],
-                "date": now.strftime("%Y-%m-%d"),
-                "Orgc": {
-                    'uuid': 'MISP ORG UUID',
-                    'name': 'Palo Alto'
-                },
-                "published": False,
-                "analysis": "0",
-                "Attribute": attribute_list,
-                "Tag": {
-                    "exportable": True,
-                    "name": "firewall threats"
-                }
-            }
-        }
-
+# initialize and set MISPOrganisation
+orgc = MISPOrganisation()
+orgc.name = 'Palo Alto'
+orgc.id = '#{ORGC_ID}'  # organisation id
+orgc.uuid = '#{ORGC_UUID}'  # organisation uuid
+# initialize and set MISPEvent()
+event = MISPEvent()
+event.Orgc = orgc
+event.info = json_data['report']['result']['@name'] + " | " + json_data['report']['result']['@range']
+event.distribution = 0  # Optional, defaults to MISP.default_event_distribution in MISP config
+event.threat_level_id = 0  # Optional, defaults to MISP.default_event_threat_level in MISP config
+event.analysis = 0  # Optional, defaults to 0 (initial analysis)
+event.add_tag('firewall threats')
 
 for threatid in json_data['report']['result']['entry']:
-    attribute = {
-        "to_ids": False,
-        "category": "External analysis",
-        "type": "comment",
-        "value": threatid['threatid'],
-        "comment": threatid['count']
-    }
-    attribute_list.append(attribute)
+    attribute = event.add_attribute('comment', threatid['threatid'])
+    attribute.comment = threatid['count']
 
-event_list.append(event)
-event_json = json.dumps(event_list)
-misp.add_event(event_json)
-
+misp.add_event(event.to_json())
