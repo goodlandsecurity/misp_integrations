@@ -10,7 +10,7 @@ pymisp==2.4.114
 pyrsistent==0.15.4
 python-dateutil==2.8.0
 pytz==2019.2
-PyYAML==5.1.2
+PyYAML==5.4
 requests==2.22.0
 six==1.12.0
 trustar==0.3.20
